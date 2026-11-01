@@ -18,6 +18,27 @@ jobs:
           php-version: '8.2'
       - name: Run contract smoke checks
         run: php tests/contract-smoke.php
+      - name: Exercise POS HTTP contract
+        shell: bash
+        run: |
+          rm -rf app/storage
+          php -S 127.0.0.1:8080 -t app/public >/tmp/pos.log 2>&1 &
+          server_pid=$!
+          trap 'kill $server_pid' EXIT
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:8080/api/v1/health >/tmp/health.json; then break; fi
+            sleep 1
+          done
+          test "$(cat /tmp/health.json)" = '{"status":"ok","service":"pos-order"}'
+          sale='{"occurredAt":"2026-11-01T00:00:00Z","items":[{"productId":"prod-beras-5kg","quantity":2,"unitPrice":12000}],"payment":{"method":"cash"}}'
+          status=$(curl -sS -o /tmp/sale.json -w '%{http_code}' -H 'Content-Type: application/json' -d "$sale" http://127.0.0.1:8080/api/v1/sales)
+          test "$status" = 201
+          status=$(curl -sS -o /tmp/invalid.json -w '%{http_code}' -H 'Content-Type: application/json' -d '{"occurredAt":"2026-11-01T00:00:00Z","items":[{"productId":"prod-beras-5kg","quantity":0,"unitPrice":12000}],"payment":{"method":"cash"}}' http://127.0.0.1:8080/api/v1/sales)
+          test "$status" = 422
+          order='{"externalMessageId":"wa-ci-1","receivedAt":"2026-11-01T00:00:00Z","items":[{"productId":"prod-gula-1kg","quantity":1}]}'
+          curl -fsS -o /tmp/order-1.json -H 'Content-Type: application/json' -H 'Idempotency-Key: wa-ci-1' -d "$order" http://127.0.0.1:8080/api/v1/orders/whatsapp
+          curl -fsS -o /tmp/order-2.json -H 'Content-Type: application/json' -H 'Idempotency-Key: wa-ci-1' -d "$order" http://127.0.0.1:8080/api/v1/orders/whatsapp
+          test "$(php -r 'echo count(json_decode(file_get_contents("app/storage/orders.json"), true));')" = 1
       - name: Exercise POS to inventory to procurement flow
         shell: bash
         run: |
