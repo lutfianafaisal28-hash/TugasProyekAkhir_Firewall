@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-$root = dirname(__DIR__, 2) . '/..';
+$root = dirname(__DIR__, 2);
 $dataDir = $root . '/app/storage';
 $eventsFile = $dataDir . '/events.ndjson';
 $inventoryFile = $dataDir . '/inventory.json';
