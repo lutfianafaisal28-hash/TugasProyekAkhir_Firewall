@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-$root = dirname(__DIR__, 2) . '/..';
+$root = dirname(__DIR__, 2);
 $file = $root . '/app/storage/inventory.json';
 $inventory = is_file($file) ? (json_decode((string)file_get_contents($file), true) ?: []) : [];
 $minimum = ['prod-beras-5kg'=>5,'prod-gula-1kg'=>5,'prod-minyak-1l'=>3];
