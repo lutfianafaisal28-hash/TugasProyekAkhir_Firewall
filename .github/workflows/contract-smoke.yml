@@ -22,8 +22,14 @@ jobs:
         shell: bash
         run: |
           rm -rf app/storage
-          php -S 0.0.0.0:8080 -t app/public >/tmp/pos.log 2>&1 &
+          php -v
+          php -S 0.0.0.0:8080 -t "$GITHUB_WORKSPACE/app/public" >/tmp/pos.log 2>&1 &
           server_pid=$!
+          sleep 2
+          if ! kill -0 "$server_pid" 2>/dev/null; then
+            cat /tmp/pos.log
+            exit 1
+          fi
           trap 'kill $server_pid 2>/dev/null || true' EXIT
           if ! curl --fail --silent --show-error --retry 20 --retry-delay 1 --retry-connrefused http://127.0.0.1:8080/api/v1/health >/tmp/health.json; then
             cat /tmp/pos.log
