@@ -18,3 +18,15 @@ jobs:
           php-version: '8.2'
       - name: Run contract smoke checks
         run: php tests/contract-smoke.php
+      - name: Exercise POS to inventory to procurement flow
+        shell: bash
+        run: |
+          rm -rf app/storage
+          mkdir -p app/storage
+          cat > app/storage/events.ndjson <<'EOF'
+          {"eventId":"event-ci-1","eventType":"SaleRecorded","schemaVersion":1,"occurredAt":"2026-11-01T00:00:00Z","saleId":"sale-ci-1","currency":"IDR","items":[{"productId":"prod-beras-5kg","quantity":2}]}
+          EOF
+          php services/inventory/consumer.php
+          test "$(php -r 'echo json_decode(file_get_contents("app/storage/inventory.json"), true)["prod-beras-5kg"];')" = "-2"
+          php services/procurement/export.php
+          test -n "$(find app/storage/exports -name 'procurement-*.csv' -print -quit)"
