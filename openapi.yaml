@@ -1,0 +1,217 @@
+openapi: 3.0.3
+info:
+  title: POS & Order Service
+  version: 1.0.0
+  description: API kontrak awal untuk aplikasi kasir digital warung kelontong.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+paths:
+  /api/v1/health:
+    get:
+      summary: Readiness check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+  /api/v1/sales:
+    post:
+      summary: Record a sale
+      operationId: createSale
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSaleRequest'
+            example:
+              occurredAt: '2026-11-01T05:00:00Z'
+              items:
+                - productId: 'prod-beras-5kg'
+                  quantity: 2
+                  unitPrice: 15000
+              payment:
+                method: cash
+                amount: 30000
+      responses:
+        '201':
+          description: Sale recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /api/v1/sales/{saleId}:
+    get:
+      summary: Get a sale
+      operationId: getSale
+      parameters:
+        - $ref: '#/components/parameters/SaleId'
+      responses:
+        '200':
+          description: Sale found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sale'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/v1/orders/whatsapp:
+    post:
+      summary: Accept an order from a WhatsApp gateway
+      operationId: acceptWhatsappOrder
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+          description: External message id; repeated values do not create another order.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WhatsappOrderRequest'
+      responses:
+        '202':
+          description: Order accepted for processing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderAccepted'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+components:
+  parameters:
+    SaleId:
+      name: saleId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    ValidationError:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: https://example.invalid/problems/validation-error
+            title: Permintaan tidak valid
+            status: 422
+            detail: quantity harus berupa bilangan bulat positif.
+            instance: /api/v1/sales
+            code: validation-error
+            errors:
+              items.0.quantity:
+                - Nilai harus lebih besar dari 0.
+    Conflict:
+      description: Idempotency conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ServiceUnavailable:
+      description: Required dependency unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, service]
+      properties:
+        status: { type: string, example: ok }
+        service: { type: string, example: pos-order }
+    CreateSaleRequest:
+      type: object
+      required: [occurredAt, items, payment]
+      properties:
+        occurredAt: { type: string, format: date-time }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/SaleItem' }
+        payment: { $ref: '#/components/schemas/Payment' }
+    SaleItem:
+      type: object
+      required: [productId, quantity, unitPrice]
+      properties:
+        productId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        unitPrice: { type: integer, minimum: 0, description: Integer rupiah }
+    Payment:
+      type: object
+      required: [method, amount]
+      properties:
+        method: { type: string, enum: [cash, credit] }
+        amount: { type: integer, minimum: 0 }
+        customerId: { type: string }
+    Sale:
+      type: object
+      required: [saleId, status, totalAmount, createdAt, items]
+      properties:
+        saleId: { type: string }
+        status: { type: string, enum: [recorded] }
+        totalAmount: { type: integer }
+        createdAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SaleItem' }
+    WhatsappOrderRequest:
+      type: object
+      required: [externalMessageId, receivedAt, items]
+      properties:
+        externalMessageId: { type: string }
+        receivedAt: { type: string, format: date-time }
+        customerId: { type: string }
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/OrderItem' }
+    OrderItem:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+    OrderAccepted:
+      type: object
+      required: [orderId, status, acceptedAt]
+      properties:
+        orderId: { type: string }
+        status: { type: string, enum: [accepted] }
+        acceptedAt: { type: string, format: date-time }
+    ProblemDetails:
+      type: object
+      required: [type, title, status, detail, instance, code]
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code: { type: string }
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items: { type: string }
